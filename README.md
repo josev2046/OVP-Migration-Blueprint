@@ -65,3 +65,6 @@ In the context of digital content migration, this blueprint serves as a guide fo
     * Source: [4]
     * Documentation URL: [Brightcove API Documentation](https://apis.support.brightcove.com/)
     * Description: Brightcove's API documentation provides comprehensive resources for developers to interact with the Brightcove platform programmatically. It includes features related to video publishing, content management, player customization, analytics, and monetization.
+ 
+[![DOI](https://zenodo.org/badge/949458424.svg)](https://doi.org/10.5281/zenodo.15035050)
+
