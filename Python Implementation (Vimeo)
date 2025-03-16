@@ -1,0 +1,96 @@
+import os
+import requests
+from pathlib import Path
+from tqdm import tqdm
+import xml.etree.ElementTree as ET
+
+# Replace with your Vimeo API access token
+access_token = "{TOKEN}"
+
+# Replace with the video ID you want to download
+video_id = "{ID}"
+
+# Construct the Vimeo API URL to get video information
+vimeo_url = f"https://api.vimeo.com/videos/{video_id}"
+
+# Set the Vimeo API headers
+headers = {
+    "Authorization": f"Bearer {access_token}",
+    "Accept": "application/vnd.vimeo.*+json;version=3.4",
+}
+
+# Make a GET request to the Vimeo API to get video information
+response = requests.get(vimeo_url, headers=headers)
+
+if response.status_code == 200:
+    video_info = response.json()
+    print("Video information retrieved successfully:")
+    print(video_info)
+
+    # Extract metadata
+    video_title = video_info["name"]
+    video_description = video_info["description"]
+    video_tags = [tag["tag"] for tag in video_info["tags"]]
+
+    # Create an XML file to store metadata
+    metadata = ET.Element("video_metadata")
+    ET.SubElement(metadata, "title").text = video_title
+    ET.SubElement(metadata, "description").text = video_description
+    tags = ET.SubElement(metadata, "tags")
+    for tag in video_tags:
+        ET.SubElement(tags, "tag").text = tag
+
+    metadata_tree = ET.ElementTree(metadata)
+    metadata_tree.write(f"{video_id}_metadata.xml")
+
+    # Find the highest quality download link
+    download_url = None
+    quality = "1080p"
+    for download in video_info["download"]:
+        if download["public_name"] == quality:
+            download_url = download["link"]
+            break
+
+    # If 1080p quality is not available, choose the highest quality available
+    if not download_url:
+        available_qualities = [d["public_name"] for d in video_info["download"]]
+        highest_quality = max(available_qualities)
+        for download in video_info["download"]:
+            if download["public_name"] == highest_quality:
+                download_url = download["link"]
+                break
+
+    if download_url:
+        desktop_path = str(Path.home() / "Desktop")  # Get the desktop path
+        download_filename = os.path.join(desktop_path, f"{video_id}_{quality}.mp4")
+        print(f"Downloading video to: {download_filename}")
+
+        # Download the video with a progress bar
+        response = requests.get(download_url, stream=True)
+
+        if response.status_code == 200:
+            total_size = int(response.headers.get('content-length', 0))
+            with open(download_filename, 'wb') as file, tqdm(
+                    total=total_size, unit='B', unit_scale=True, unit_divisor=1024
+            ) as bar:
+                for data in response.iter_content(chunk_size=1024):
+                    file.write(data)
+                    bar.update(len(data))
+            print(f"Downloaded {download_filename}")
+
+            # Prompt the user whether to delete the video
+            delete_choice = input("Do you want to delete the video from Vimeo? (y/n): ").strip().lower()
+            if delete_choice == "y":
+                # Send a DELETE request to Vimeo
+                delete_response = requests.delete(vimeo_url, headers=headers)
+                if delete_response.status_code == 204:
+                    print("Video deleted from Vimeo successfully.")
+                else:
+                    print(f"Failed to delete video. Status Code: {delete_response.status_code}")
+
+        else:
+            print(f"Failed to download video. Status Code: {response.status_code}")
+    else:
+        print(f"No suitable quality available for this video.")
+else:
+    print(f"Failed to retrieve video information. Status Code: {response.status_code}")
