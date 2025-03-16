@@ -1,0 +1,99 @@
+import requests
+import xml.etree.ElementTree as ET
+import csv
+
+# API endpoints
+media_endpoint = "https://www.kaltura.com/api_v3/service/media/action/get"
+metadata_endpoint = "https://www.kaltura.com/api_v3/service/metadata_metadata/action/list"
+
+# Replace with your API credentials
+api_key = "A VALID KS"
+partner_id = "KALTURA ACCOUNT PARTNER ID"
+
+# Video IDs to retrieve
+video_ids = ["ENTRY ID_1", "ENTRY ID_2"]
+
+# Initialize data structures
+video_data = []
+
+# Retrieve video details using the Kaltura API
+for video_id in video_ids:
+    try:
+        media_params = {
+            "ks": api_key,
+            "partnerId": partner_id,
+            "entryId": video_id
+        }
+        media_response = requests.get(media_endpoint, params=media_params)
+        media_response.raise_for_status()
+
+        media_content = media_response.content.decode('utf-8')
+        media_root = ET.fromstring(media_content)
+        
+        title = media_root.find(".//name").text
+        description = media_root.find(".//description").text
+        tags = media_root.find(".//tags").text
+        thumbnail_url = media_root.find(".//thumbnailUrl").text
+        download_url = media_root.find(".//downloadUrl").text
+
+        metadata_params = {
+            "ks": api_key,
+            "objectId": video_id,
+            "objectType": "KalturaEntryContextData"
+        }
+        metadata_response = requests.get(metadata_endpoint, params=metadata_params)
+        metadata_response.raise_for_status()
+
+        metadata_content = metadata_response.content.decode('utf-8')
+        metadata_root = ET.fromstring(metadata_content)
+
+        custom_metadata = []
+        for profile in metadata_root.findall(".//objects/item"):
+            metadata_profile_id = profile.find(".//metadataProfileId").text
+            custom_metadata.append({"metadataProfileId": metadata_profile_id})
+
+        video_data.append({
+            "title": title,
+            "description": description,
+            "tags": tags,
+            "thumbnail_url": thumbnail_url,
+            "download_url": download_url,
+            "custom_metadata": custom_metadata
+        })
+    except requests.exceptions.RequestException as e:
+        print(f"Error retrieving data for video {video_id}: {e}")
+    except Exception as ex:
+        print(f"Error processing data for video {video_id}: {ex}")
+
+# Convert data to XML
+root = ET.Element("videos")
+for video in video_data:
+    video_element = ET.SubElement(root, "video")
+    ET.SubElement(video_element, "title").text = video["title"]
+    ET.SubElement(video_element, "description").text = video["description"]
+    ET.SubElement(video_element, "tags").text = video["tags"]
+    ET.SubElement(video_element, "thumbnail_url").text = video["thumbnail_url"]
+    ET.SubElement(video_element, "download_url").text = video["download_url"]
+    custom_metadata_element = ET.SubElement(video_element, "custom_metadata")
+    for metadata in video["custom_metadata"]:
+        ET.SubElement(custom_metadata_element, "metadataProfileId").text = metadata["metadataProfileId"]
+
+xml_tree = ET.ElementTree(root)
+xml_tree.write("videos.xml")
+
+# Convert data to CSV
+with open("videos.csv", "w", newline="") as csvfile:
+    fieldnames = ["title", "tags", "description", "thumbnail_url", "download_url"]
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer.writeheader()
+    for video in video_data:
+        writer.writerow({
+            "title": video["title"],
+            "tags": video["tags"],
+            "description": video["description"],
+            "thumbnail_url": video["thumbnail_url"],
+            "download_url": video["download_url"]
+        })
+
+print("XML and CSV files created successfully.")
+
